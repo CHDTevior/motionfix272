@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+
+# Generated data should not be committed.
+motionstreamer272_hml_joint_vecs/
+manifests/
+stats/
+*.npy
+*.pth.tar
+*.jsonl

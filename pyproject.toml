@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "motionfix272"
+version = "0.1.0"
+description = "Convert MotionFix raw pose pairs to HumanML3D/MotionStreamer 272D features."
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.23",
+  "torch>=2.0",
+  "joblib>=1.3",
+  "tqdm>=4.60",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["motionfix272*"]
