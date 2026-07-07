@@ -193,3 +193,36 @@ Use the generated `Mean.npy` and `Std.npy` from:
 Those stats are computed over both source and target motions in the train split.
 For VQ/RVQ training, the loss is expected to be computed on normalized 272D
 features unless the downstream code explicitly changes that behavior.
+
+## Deprecated Pre-Fix Artifacts
+
+On 2026-07-07 we fixed the MotionFix -> HML272 rotation basis so that the
+rotation channels match the released HumanML3D_272 convention:
+
+```text
+root/body local +Y = up
+root/body local +Z = forward
+identity [140:272] = SMPL/SMPL-X canonical zero-pose basis
+```
+
+Older generated data, visualizations, and checkpoints that used the pre-fix
+rotation-basis assumption were archived instead of deleted:
+
+```text
+/mnt/afs/mogo_base/datasets/deprecated_wrong_272_basis_20260707
+/mnt/afs/UMO_debug/eval_runs/deprecated_wrong_272_basis_20260707
+/mnt/afs/UMO_debug/checkpoints/deprecated_wrong_272_basis_20260707
+```
+
+The active corrected dataset is only:
+
+```text
+/mnt/afs/mogo_base/datasets/MotionFix/motionstreamer272_hml_joint_vecs
+/mnt/afs/mogo_base/datasets/MotionFix/manifests/motionfix_motionstreamer272_hml_{train,val,test}.jsonl
+/mnt/afs/mogo_base/datasets/MotionFix/stats/motionstreamer272_hml_source_target_train
+```
+
+The archived paths include old `motionstreamer272_*` and `unified_v2` outputs,
+old HY201 conversions derived from those outputs, and RVQ/Edit checkpoints
+trained before the basis fix. Do not use those archived checkpoints as
+tokenizers or backbone-training inputs.
