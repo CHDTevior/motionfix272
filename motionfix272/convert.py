@@ -51,6 +51,21 @@ MOTIONFIX_TO_MOTIONSTREAMER = np.array(
     dtype=np.float32,
 )
 
+# After the world-coordinate basis change above, MotionFix SMPL-H rotations
+# still use a local rest basis where local +Y is forward and local +Z points
+# down. Official HumanML3D/MotionStreamer 272 stores rotations in the
+# SMPL/SMPL-X zero-pose frame with local +Z forward and local +Y up. Columns are
+# official-272 local axes expressed in the post-coordinate-change MotionFix
+# local axes.
+MOTIONFIX_TO_HUMANML272_LOCAL_BASIS = np.array(
+    [
+        [1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0],
+        [0.0, -1.0, 0.0],
+    ],
+    dtype=np.float32,
+)
+
 # HumanML3D-style facing estimate: right hip, left hip, right shoulder,
 # left shoulder. The initial frame is canonicalized to face +Z.
 FACE_JOINT_INDEX = (2, 1, 17, 16)
@@ -96,6 +111,18 @@ def normalize(vector: np.ndarray, eps: float = 1e-8) -> np.ndarray:
 def matrix_to_rotation_6d(matrix: np.ndarray) -> np.ndarray:
     """Return the same row-major 6D rotation layout used by our training data."""
     return matrix[..., :2, :].reshape(*matrix.shape[:-2], 6).astype(np.float32)
+
+
+def retarget_rotations_to_humanml272_basis(rotations: np.ndarray) -> np.ndarray:
+    """Change MotionFix SMPL-H local axes to official 272 zero-pose axes."""
+    rotations = np.asarray(rotations, dtype=np.float32)
+    if rotations.ndim != 4 or rotations.shape[1:] != (NUM_JOINTS, 3, 3):
+        raise ValueError(f"Expected [T,{NUM_JOINTS},3,3] rotations, got {rotations.shape}")
+    basis = MOTIONFIX_TO_HUMANML272_LOCAL_BASIS
+    out = rotations.copy()
+    out[:, 0] = rotations[:, 0] @ basis
+    out[:, 1:] = basis.T @ rotations[:, 1:] @ basis
+    return out.astype(np.float32)
 
 
 def skeleton_forward(positions: np.ndarray) -> np.ndarray:
@@ -147,6 +174,7 @@ def convert_motionfix_motion_hml(raw_motion: dict[str, Any]) -> np.ndarray:
         .astype(np.float32)
     )
     rot_mats = np.einsum("ij,tkjl,ml->tkim", basis, rot_mats_raw, basis).astype(np.float32)
+    rot_mats = retarget_rotations_to_humanml272_basis(rot_mats)
 
     origin = joints[0, 0].copy()
     origin[1] = float(joints[:, :, 1].min())
@@ -310,6 +338,7 @@ def convert_split(
                     "conversion_version": CONVERSION_VERSION,
                     "canonical_frame": "per_sequence_humanml3d",
                     "initial_forward": "hips_shoulders_to_zplus",
+                    "rotation_basis": "smplx_zero_pose_yup_zforward",
                     "direct_motionstreamer272_recover": True,
                 }
             )
@@ -409,9 +438,16 @@ def main() -> None:
         "compatibility": {
             "channel_semantics": "HumanML3D/MotionStreamer 272",
             "initial_forward": "hips_shoulders_to_zplus",
+            "rotation_basis": "smplx_zero_pose_yup_zforward",
             "uses_motionfix_meta_for_recovery": False,
             "uses_per_joint_rotation_correction": False,
             "direct_recover_function": "recover_motionstreamer272_positions",
+        },
+        "basis_motionfix_to_motionstreamer": MOTIONFIX_TO_MOTIONSTREAMER.tolist(),
+        "rotation_local_basis": {
+            "basis_current_motionfix_to_official_272": MOTIONFIX_TO_HUMANML272_LOCAL_BASIS.tolist(),
+            "root_rule": "R_272 = R_motionfix_yup @ basis",
+            "body_rule": "R_272 = basis.T @ R_motionfix_yup @ basis",
         },
         "layout": {
             "root_xz_velocity": [0, 2],

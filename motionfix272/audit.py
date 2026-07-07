@@ -16,6 +16,31 @@ DEFAULT_OUTPUT_ROOT = Path("/mnt/afs/mogo_base/datasets/MotionFix")
 DEFAULT_MANIFEST_PREFIX = "motionfix_motionstreamer272_hml"
 
 
+def normalize(vector: np.ndarray, eps: float = 1e-8) -> np.ndarray:
+    norm = np.linalg.norm(vector, axis=-1, keepdims=True)
+    return vector / np.maximum(norm, eps)
+
+
+def rotation_6d_to_matrix(d6: np.ndarray) -> np.ndarray:
+    d6 = np.asarray(d6, dtype=np.float64)
+    a1 = d6[..., :3]
+    a2 = d6[..., 3:]
+    b1 = normalize(a1)
+    b2 = normalize(a2 - np.sum(b1 * a2, axis=-1, keepdims=True) * b1)
+    b3 = np.cross(b1, b2, axis=-1)
+    return np.stack((b1, b2, b3), axis=-2)
+
+
+def skeleton_forward(local_positions: np.ndarray) -> np.ndarray:
+    across = (local_positions[:, 2] - local_positions[:, 1]) + (local_positions[:, 17] - local_positions[:, 16])
+    across = normalize(across)
+    up = np.zeros_like(across)
+    up[:, 1] = 1.0
+    forward = np.cross(up, across, axis=-1)
+    forward[:, 1] = 0.0
+    return normalize(forward)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT_ROOT)
@@ -52,6 +77,9 @@ def audit_split(output_root: Path, manifest_path: Path, max_records: int) -> dic
         "global_max": float("-inf"),
         "abs_max": 0.0,
         "root_local_xz_abs_max": 0.0,
+        "root_plus_z_face_dots": [],
+        "root_plus_y_face_dots": [],
+        "root_plus_y_abs_up_values": [],
     }
     for record in tqdm(records, desc=f"Auditing {manifest_path.name}"):
         for key in ("source", "target"):
@@ -68,8 +96,25 @@ def audit_split(output_root: Path, manifest_path: Path, max_records: int) -> dic
             positions = np.asarray(arr[:, 8:74]).reshape(arr.shape[0], 22, 3)
             root_xz = positions[:, 0, [0, 2]]
             summary["root_local_xz_abs_max"] = max(summary["root_local_xz_abs_max"], float(np.abs(root_xz).max()))
+            rotations = rotation_6d_to_matrix(np.asarray(arr[:, 140:272]).reshape(arr.shape[0], 22, 6))
+            face = skeleton_forward(positions)
+            root_plus_z = rotations[:, 0] @ np.array([0.0, 0.0, 1.0])
+            root_plus_y = rotations[:, 0] @ np.array([0.0, 1.0, 0.0])
+            root_plus_z_h = normalize(root_plus_z * np.array([1.0, 0.0, 1.0]))
+            root_plus_y_h = normalize(root_plus_y * np.array([1.0, 0.0, 1.0]))
+            summary["root_plus_z_face_dots"].append(np.sum(root_plus_z_h * face, axis=-1))
+            summary["root_plus_y_face_dots"].append(np.sum(root_plus_y_h * face, axis=-1))
+            summary["root_plus_y_abs_up_values"].append(np.abs(root_plus_y[:, 1]))
             summary["motion_files_checked"] += 1
             summary["frames_checked"] += int(arr.shape[0])
+    if summary["root_plus_z_face_dots"]:
+        z_dots = np.concatenate(summary.pop("root_plus_z_face_dots"))
+        y_dots = np.concatenate(summary.pop("root_plus_y_face_dots"))
+        y_up = np.concatenate(summary.pop("root_plus_y_abs_up_values"))
+        summary["root_plus_z_face_dot_median"] = float(np.median(z_dots))
+        summary["root_plus_z_face_dot_p05"] = float(np.percentile(z_dots, 5))
+        summary["root_plus_y_face_dot_median"] = float(np.median(y_dots))
+        summary["root_plus_y_abs_up_median"] = float(np.median(y_up))
     return summary
 
 

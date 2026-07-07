@@ -56,6 +56,7 @@ conversion_version: motionfix_motionstreamer272_hml
 coordinate system:  y-up, x/z ground plane
 initial facing:     hips/shoulders skeleton forward aligned to +Z
 canonical frame:    per-sequence HumanML3D style
+rotation basis:     SMPL/SMPL-X zero-pose frame, local +Z forward, local +Y up
 raw MotionFix meta: not needed for recovery
 joint correction:   no per-joint correction/inverse is applied
 recover function:   recover_motionstreamer272_positions
@@ -64,6 +65,12 @@ recover function:   recover_motionstreamer272_positions
 Important: this is not the original MotionFix 207D representation. MotionFix raw
 z-up coordinates are converted to MotionStreamer/HumanML-style y-up coordinates
 with the basis `(x, y, z)_raw -> (x, z, -y)_hml`.
+
+For rotations, the converter additionally changes the MotionFix SMPL-H local
+rest basis into the official 272D basis. After conversion, root local `+Z`
+matches the body facing direction and root local `+Y` is vertical up, matching
+the released HumanML3D_272 files. Filling `[140:272]` with identity rotations is
+therefore interpreted relative to the SMPL/SMPL-X canonical zero pose.
 
 ## Install
 
@@ -170,6 +177,7 @@ Each manifest row contains:
   "conversion_version": "motionfix_motionstreamer272_hml",
   "canonical_frame": "per_sequence_humanml3d",
   "initial_forward": "hips_shoulders_to_zplus",
+  "rotation_basis": "smplx_zero_pose_yup_zforward",
   "direct_motionstreamer272_recover": true
 }
 ```
